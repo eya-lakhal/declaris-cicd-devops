@@ -1,0 +1,35 @@
+version: "3.8"
+
+networks:
+  declaris-net:
+    external: true
+    name: declaris-net
+
+services:
+  declaris-backend:
+    container_name: declarisbe
+    build:
+      context: ../declaris-backend
+      dockerfile: Dockerfile
+    ports:
+      - "8081:8085"
+    networks:
+      - declaris-net
+    restart: unless-stopped
+    labels:
+      - "app=declaris-backend"
+
+  declaris-frontend:
+    container_name: declarisfe
+    build:
+      context: ../declaris-frontend
+      dockerfile: Dockerfile
+    ports:
+      - "4500:4500"
+    volumes:
+      - /var/log/declaris-frontend:/var/log/nginx:Z
+    networks:
+      - declaris-net
+    restart: unless-stopped
+    labels:
+      - "app=declaris-frontend-container"

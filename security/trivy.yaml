@@ -1,0 +1,22 @@
+# Configuration Trivy équivalente aux options utilisées dans les pipelines :
+#   trivy image --input <image>.tar --scanners vuln --vuln-type os \
+#                --severity HIGH,CRITICAL --exit-code 0
+# Utilisation : trivy image --config security/trivy.yaml --input image.tar
+
+scan:
+  scanners:
+    - vuln
+
+vulnerability:
+  type:
+    - os
+
+severity:
+  - HIGH
+  - CRITICAL
+
+# 0 = le pipeline continue même si des vulnérabilités sont trouvées (mode rapport).
+# Passer à 1 pour bloquer le déploiement en cas de vulnérabilité HIGH/CRITICAL.
+exit-code: 0
+
+format: table

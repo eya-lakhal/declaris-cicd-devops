@@ -1,0 +1,33 @@
+# Secrets
+*.env
+.env*
+*secret*
+*.pem
+*.key
+*.p12
+*.jks
+credentials.xml
+secrets/
+
+# Archives et exports des VM (trop lourds pour Git)
+*.ova
+*.ovf
+*.vmdk
+*.tar
+*.tar.gz
+*.zip
+export-*/
+
+# Build
+node_modules/
+dist/
+target/
+
+# Logs
+*.log
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

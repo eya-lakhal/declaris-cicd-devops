@@ -1,0 +1,26 @@
+# /etc/systemd/system/sonarqube.service
+# ⚠️ PROPOSITION — pendant le stage, SonarQube n'avait PAS de service systemd :
+#    il était lancé à la main (aucun service sonar activé dans l'export de la VM).
+#    Ce fichier permet de le démarrer automatiquement au boot.
+# Installation : sudo cp sonarqube.service /etc/systemd/system/
+#                sudo systemctl daemon-reload && sudo systemctl enable --now sonarqube
+# Vérifier l'utilisateur propriétaire de /opt/sonarqube (ls -ld /opt/sonarqube).
+
+[Unit]
+Description=SonarQube service
+After=syslog.target network.target
+
+[Service]
+Type=forking
+User=sonar
+Group=sonar
+Environment="JAVA_HOME=/usr/lib/jvm/java-17-openjdk"
+ExecStart=/opt/sonarqube/bin/linux-x86-64/sonar.sh start
+ExecStop=/opt/sonarqube/bin/linux-x86-64/sonar.sh stop
+LimitNOFILE=131072
+LimitNPROC=8192
+Restart=on-failure
+TimeoutStartSec=300
+
+[Install]
+WantedBy=multi-user.target

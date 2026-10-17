@@ -1,0 +1,10 @@
+version: "3.8"
+
+services:
+  frontend:
+    image: declarisfe
+    build: .
+    container_name: declarisfe
+    ports:
+      - "86:86"
+    restart: always

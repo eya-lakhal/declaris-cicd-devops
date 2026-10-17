@@ -1,0 +1,147 @@
+pipeline {
+    agent {
+        node {
+            label ''
+            customWorkspace '/var/lib/jenkins/declaris/declaris-frontend'
+        }
+    }
+    environment {
+        GIT_BRANCH = "main"
+        GIT_CREDENTIALS_ID = "gitlab-git-credentials"
+        GIT_URL = "https://gitlab.com/eyalakhal-group/declaris-frontend.git"
+    }
+    stages {
+        stage('Clean Workspace') {
+            steps { deleteDir() }
+        }
+        stage('Clone') {
+            steps {
+                retry(3) {
+                    git branch: "${GIT_BRANCH}",
+                        credentialsId: "${GIT_CREDENTIALS_ID}",
+                        url: "${GIT_URL}"
+                }
+            }
+        }
+        stage('Build Angular') {
+             steps {
+                sh """
+                   export PATH=/usr/local/bin:\$PATH
+                   npm --version
+                   rm -f .npmrc
+                   rm -f package-lock.json
+                   npm install --legacy-peer-deps --registry https://registry.npmjs.org
+                   npx ng build --configuration=production
+                """
+           }
+        }
+      stage('SonarQube Analysis') {
+           steps {
+               script {
+                 def scannerHome = tool 'SonarScanner'   // nom dans Manage Jenkins → Tools
+                 withSonarQubeEnv('SonarQube') {         // nom dans Manage Jenkins → System
+                sh """
+                    ${scannerHome}/bin/sonar-scanner \
+                      -Dsonar.projectKey=declaris-frontend \
+                      -Dsonar.projectName=declaris-frontend \
+                      -Dsonar.sources=src \
+                      -Dsonar.exclusions=**/node_modules/**,**/*.spec.ts,dist/** \
+                      -Dsonar.sourceEncoding=UTF-8
+                """
+               }
+           }
+        }
+     }
+        stage('Trivy Security Scan') {
+            steps {
+                sh """
+                    cd /var/lib/jenkins/declaris/declaris-deploy
+                    podman build -t declaris-frontend:scan-temp ../declaris-frontend
+                    rm -f /tmp/declaris-frontend-scan.tar
+                    podman save -o /tmp/declaris-frontend-scan.tar localhost/declaris-frontend:scan-temp
+                    trivy image --input /tmp/declaris-frontend-scan.tar --scanners vuln --vuln-type os --severity HIGH,CRITICAL --exit-code 0
+                    rm -f /tmp/declaris-frontend-scan.tar
+                """
+            }
+        }
+        stage('Validation du déploiement') {
+            steps {
+                script {
+                    def changesText = getChangesText(currentBuild)
+
+                    emailext(
+                        subject: "Approbation requise : ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                        body: """Bonjour,
+
+Un nouveau build frontend est en attente de ton approbation pour déploiement.
+
+Job : ${env.JOB_NAME}
+Build : #${env.BUILD_NUMBER}
+
+Changements détectés :
+${changesText}
+
+Pour approuver ou rejeter, connecte-toi à Jenkins et clique ici :
+${env.BUILD_URL}input
+
+Cordialement,
+Jenkins
+""",
+                        to: 'eyalakhal9@gmail.com'
+                    )
+
+                    def decision = input(
+                        message: 'Choisissez une action',
+                        parameters: [
+                            choice(
+                                name: 'DECISION',
+                                choices: ['APPROUVER', 'REFUSER'],
+                                description: 'Autoriser le déploiement ?'
+                            )
+                        ]
+                    )
+
+                    if (decision == 'REFUSER') {
+                        error("Déploiement refusé par l'utilisateur.")
+                    }
+
+                    echo "Déploiement approuvé."
+                }
+            }
+        }
+        stage('Deploy avec Compose') {
+            steps {
+                sh """
+                    cd /var/lib/jenkins/declaris/declaris-deploy
+                    git pull origin main
+                    podman-compose stop declaris-frontend || true
+                    podman rm -f declarisfe || true
+                    sudo pkill -9 -f "rootlessport" || true
+                    sleep 5
+                    podman-compose up -d --build declaris-frontend
+                """
+            }
+        }
+    }
+    post {
+        success { echo "Frontend déployé avec succès via docker-compose" }
+        failure { echo "Échec du pipeline frontend" }
+    }
+}
+
+@NonCPS
+def getChangesText(build) {
+    def changesText = ""
+    def changeLogSets = build.changeSets
+    for (int i = 0; i < changeLogSets.size(); i++) {
+        def entries = changeLogSets[i].items
+        for (int j = 0; j < entries.length; j++) {
+            def entry = entries[j]
+            changesText += "- ${entry.author} : ${entry.msg}\n"
+        }
+    }
+    if (!changesText?.trim()) {
+        changesText = "Aucun changement de code détecté dans ce build (peut-être un redéclenchement manuel)."
+    }
+    return changesText
+}
